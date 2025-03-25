@@ -22,7 +22,7 @@ app = Flask(__name__)
 # Download API URL for audio downloads
 DOWNLOAD_API_URL = "https://frozen-youtube-api-search-link-ksog.onrender.com/download?url="
 # Download API URL for video downloads (assumed)
-VIDEO_DOWNLOAD_API_URL = "https://frozen-youtube-api-search-link-ksog.onrender.com/vdownload?url="
+VIDEO_DOWNLOAD_API_URL = "https://frozen-youtube-api-search-link-ksog.onrender.com/vdown?url="
 
 # Caching setup
 search_cache = {}
