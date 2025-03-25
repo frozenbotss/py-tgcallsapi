@@ -6,8 +6,8 @@ import os
 import functools
 import threading
 import re
-from flask import Flask, request, jsonify
-from pyrogram import Client, filters
+from flask import Flask, request, jsonify, send_file
+from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.handlers import MessageHandler  # For adding message handlers
 from pytgcalls import PyTgCalls
@@ -19,8 +19,10 @@ from pytgcalls.types.stream import StreamEnded
 # Initialize Flask app
 app = Flask(__name__)
 
-# Download API URL
+# Download API URL for audio downloads
 DOWNLOAD_API_URL = "https://frozen-youtube-api-search-link-ksog.onrender.com/download?url="
+# Download API URL for video downloads (assumed)
+VIDEO_DOWNLOAD_API_URL = "https://frozen-youtube-api-search-link-ksog.onrender.com/vdownload?url="
 
 # Caching setup
 search_cache = {}
@@ -125,6 +127,26 @@ async def download_audio(url):
     except Exception as e:
         raise Exception(f"Error downloading audio: {e}")
 
+async def download_video(url):
+    """Downloads the video from a given URL and returns the file path."""
+    if url in download_cache:
+        return download_cache[url]
+    try:
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+        file_name = temp_file.name
+        download_url = f"{VIDEO_DOWNLOAD_API_URL}{url}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(download_url) as response:
+                if response.status == 200:
+                    with open(file_name, 'wb') as f:
+                        f.write(await response.read())
+                    download_cache[url] = file_name
+                    return file_name
+                else:
+                    raise Exception(f"Failed to download video. HTTP status: {response.status}")
+    except Exception as e:
+        raise Exception(f"Error downloading video: {e}")
+
 @functools.lru_cache(maxsize=100)
 def search_video(title):
     """Searches for a video using the external API and caches the result."""
@@ -134,13 +156,26 @@ def search_video(title):
     return search_response.json()
 
 async def play_media(chat_id, video_url, title):
-    """Downloads and plays the media in the specified chat."""
+    """Downloads and plays the audio media in the specified chat."""
     media_path = await download_audio(video_url)
     await py_tgcalls.play(
         chat_id,
         MediaStream(
             media_path,
-            video_flags=MediaStream.Flags.IGNORE,
+            video_flags=MediaStream.Flags.IGNORE,  # This flag is used for audio-only playback.
+        )
+    )
+
+async def play_video_media(chat_id, video_url, title):
+    """Downloads and plays the video media in the specified chat.
+       Note: video_flags are not set, so the video stream is played normally.
+    """
+    video_file = await download_video(video_url)
+    await py_tgcalls.play(
+        chat_id,
+        MediaStream(
+            video_file
+            # No ignore flag here so that the video is played.
         )
     )
 
@@ -166,12 +201,47 @@ def play():
     try:
         # Initialize the clients on the dedicated loop if needed.
         asyncio.run_coroutine_threadsafe(init_clients(), tgcalls_loop).result()
-        # Schedule play_media on the dedicated loop.
+        # Schedule play_media (audio-only) on the dedicated loop.
         asyncio.run_coroutine_threadsafe(play_media(chat_id, video_url, video_title), tgcalls_loop).result()
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
     return jsonify({'message': 'Playing media', 'chatid': chatid, 'title': video_title})
+
+@app.route('/vplay', methods=['GET'])
+def vplay():
+    """
+    New endpoint for video playback.
+    When the user calls /vplay with a 'chatid' and 'title' parameter,
+    the API searches for the video, downloads the video file using the vdown logic,
+    and plays the video (without ignoring the media) in the specified chat.
+    """
+    chatid = request.args.get('chatid')
+    title = request.args.get('title')
+    if not chatid or not title:
+        return jsonify({'error': 'Missing chatid or title parameter'}), 400
+    try:
+        chat_id = int(chatid)
+    except ValueError:
+        return jsonify({'error': 'Invalid chatid parameter'}), 400
+
+    search_result = search_video(title)
+    if not search_result:
+        return jsonify({'error': 'Failed to search video'}), 500
+    video_url = search_result.get("link")
+    video_title = search_result.get("title")
+    if not video_url:
+        return jsonify({'error': 'No video found'}), 404
+
+    try:
+        # Ensure clients are initialized.
+        asyncio.run_coroutine_threadsafe(init_clients(), tgcalls_loop).result()
+        # Schedule video download and playback on the dedicated loop.
+        asyncio.run_coroutine_threadsafe(play_video_media(chat_id, video_url, video_title), tgcalls_loop).result()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    return jsonify({'message': 'Playing video media', 'chatid': chatid, 'title': video_title})
 
 @app.route('/stop', methods=['GET'])
 def stop():
@@ -279,6 +349,7 @@ if __name__ == '__main__':
     asyncio.run_coroutine_threadsafe(init_clients(), tgcalls_loop).result()
     port = int(os.environ.get("PORT", 8000))
     app.run(host="0.0.0.0", port=port)
+
 
 
 
