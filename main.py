@@ -26,7 +26,9 @@ VIDEO_DOWNLOAD_API_URL = "https://frozen-youtube-api-search-link-ksog.onrender.c
 
 # Caching setup
 search_cache = {}
-download_cache = {}
+# Remove unified cache and use separate caches for audio and video
+download_cache_audio = {}
+download_cache_video = {}
 
 # Global variables for the async clients (to be created in the dedicated loop)
 assistant = None
@@ -109,8 +111,8 @@ async def init_clients():
 
 async def download_audio(url):
     """Downloads the audio from a given URL and returns the file path."""
-    if url in download_cache:
-        return download_cache[url]
+    if url in download_cache_audio:
+        return download_cache_audio[url]
     try:
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
         file_name = temp_file.name
@@ -120,7 +122,7 @@ async def download_audio(url):
                 if response.status == 200:
                     with open(file_name, 'wb') as f:
                         f.write(await response.read())
-                    download_cache[url] = file_name
+                    download_cache_audio[url] = file_name
                     return file_name
                 else:
                     raise Exception(f"Failed to download audio. HTTP status: {response.status}")
@@ -129,8 +131,8 @@ async def download_audio(url):
 
 async def download_video(url):
     """Downloads the video from a given URL and returns the file path."""
-    if url in download_cache:
-        return download_cache[url]
+    if url in download_cache_video:
+        return download_cache_video[url]
     try:
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
         file_name = temp_file.name
@@ -140,7 +142,7 @@ async def download_video(url):
                 if response.status == 200:
                     with open(file_name, 'wb') as f:
                         f.write(await response.read())
-                    download_cache[url] = file_name
+                    download_cache_video[url] = file_name
                     return file_name
                 else:
                     raise Exception(f"Failed to download video. HTTP status: {response.status}")
