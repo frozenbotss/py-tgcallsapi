@@ -67,7 +67,7 @@ async def stream_end_handler(_: PyTgCalls, update: StreamEnded):
         await py_tgcalls.leave_call(chat_id)
         # Send a message indicating that the stream ended.
         await assistant.send_message(
-            "@vcmusiclubot",
+            "@rfsbhd",
             f"Stream ended in chat id {chat_id}"
         )
     except Exception as e:
