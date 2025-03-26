@@ -7,7 +7,7 @@ import functools
 import threading
 import re
 from flask import Flask, request, jsonify, send_file
-from pyrogram import Client, filters
+from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.handlers import MessageHandler  # For adding message handlers
 from pytgcalls import PyTgCalls
@@ -105,12 +105,9 @@ async def init_clients():
         py_tgcalls = PyTgCalls(assistant)
         await py_tgcalls.start()
         clients_initialized = True
-
         # Register all pending update handlers now that py_tgcalls is initialized.
         for filter_, handler in pending_update_handlers:
             py_tgcalls.on_update(filter_)(handler)
-        # Register the /add command handler for adding and promoting a bot.
-        assistant.add_handler(MessageHandler(add_command_handler, filters.command("add")))
 
 async def download_audio(url):
     """Downloads the audio from a given URL and returns the file path."""
@@ -348,57 +345,6 @@ def resume():
         return jsonify({'error': str(e)}), 500
 
     return jsonify({'message': 'Resumed media', 'chatid': chatid})
-
-# -------------------------------
-# New command handler for the /add command
-# -------------------------------
-async def add_command_handler(client: Client, message: Message):
-    """
-    When a user sends /add <bot_username_or_link>,
-    the assistant will add that bot to the @rfsbhd group and promote it to admin.
-    """
-    try:
-        # Check if the command has the required argument.
-        if len(message.command) < 2:
-            await message.reply("Please provide the bot username or link. Example: /add @mybot")
-            return
-
-        bot_identifier = message.command[1].strip()
-        # Remove URL parts if provided.
-        if bot_identifier.startswith("https://t.me/"):
-            bot_identifier = bot_identifier.split("https://t.me/")[1].strip("/")
-        if bot_identifier.startswith("@"):
-            bot_identifier = bot_identifier[1:]
-
-        # Define the target group (hard-coded)
-        target_group = "@rfsbhd"
-
-        # Add the bot to the target group.
-        # Note: This call might require that the assistant has the necessary privileges.
-        await client.add_chat_members(target_group, bot_identifier)
-
-        # Retrieve the bot's user info to get the user_id.
-        user = await client.get_users(bot_identifier)
-        user_id = user.id
-
-        # Promote the added bot to admin with a set of privileges.
-        await client.promote_chat_member(
-            chat_id=target_group,
-            user_id=user_id,
-            is_anonymous=False,
-            can_change_info=True,
-            can_post_messages=True,
-            can_edit_messages=True,
-            can_delete_messages=True,
-            can_invite_users=True,
-            can_restrict_members=True,
-            can_pin_messages=True,
-            can_promote_members=True
-        )
-
-        await message.reply("Successfully added and promoted. Enjoy your own music bot!")
-    except Exception as e:
-        await message.reply(f"Error: {e}")
 
 if __name__ == '__main__':
     # Optionally initialize the clients at startup.
