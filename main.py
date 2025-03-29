@@ -192,16 +192,23 @@ def play():
     except ValueError:
         return jsonify({'error': 'Invalid chatid parameter'}), 400
 
-    search_result = search_video(title)
-    if not search_result:
-        return jsonify({'error': 'Failed to search video'}), 500
-    video_url = search_result.get("link")
-    video_title = search_result.get("title")
-    if not video_url:
-        return jsonify({'error': 'No video found'}), 404
+    # Check if the title is actually a direct URL.
+    if title.startswith("http"):
+        # Treat the title parameter as the direct audio URL.
+        video_url = title
+        video_title = "Direct Audio"
+    else:
+        # Otherwise perform the search as before.
+        search_result = search_video(title)
+        if not search_result:
+            return jsonify({'error': 'Failed to search video'}), 500
+        video_url = search_result.get("link")
+        video_title = search_result.get("title")
+        if not video_url:
+            return jsonify({'error': 'No video found'}), 404
 
     try:
-        # Initialize the clients on the dedicated loop if needed.
+        # Ensure the clients are initialized.
         asyncio.run_coroutine_threadsafe(init_clients(), tgcalls_loop).result()
         # Schedule play_media (audio-only) on the dedicated loop.
         asyncio.run_coroutine_threadsafe(play_media(chat_id, video_url, video_title), tgcalls_loop).result()
@@ -209,6 +216,7 @@ def play():
         return jsonify({'error': str(e)}), 500
 
     return jsonify({'message': 'Playing media', 'chatid': chatid, 'title': video_title})
+
 
 @app.route('/vplay', methods=['GET'])
 def vplay():
