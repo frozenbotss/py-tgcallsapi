@@ -192,30 +192,35 @@ def play():
     except ValueError:
         return jsonify({'error': 'Invalid chatid parameter'}), 400
 
-    # Check if the title is actually a direct URL.
+    # If title is a direct URL, bypass the search.
     if title.startswith("http"):
-        # Treat the title parameter as the direct audio URL.
         video_url = title
         video_title = "Direct Audio"
     else:
-        # Otherwise perform the search as before.
-        search_result = search_video(title)
-        if not search_result:
-            return jsonify({'error': 'Failed to search video'}), 500
-        video_url = search_result.get("link")
-        video_title = search_result.get("title")
-        if not video_url:
-            return jsonify({'error': 'No video found'}), 404
+        try:
+            search_result = search_video(title)
+            if not search_result:
+                raise Exception("Search result is empty or returned an error")
+            video_url = search_result.get("link")
+            video_title = search_result.get("title")
+            if not video_url:
+                raise Exception("Video URL not found in search result")
+        except Exception as e:
+            # Log the exact error for debugging.
+            print(f"Error searching video for title '{title}': {e}")
+            return jsonify({'error': f"Failed to search video: {e}"}), 500
 
     try:
-        # Ensure the clients are initialized.
+        # Initialize clients if needed.
         asyncio.run_coroutine_threadsafe(init_clients(), tgcalls_loop).result()
-        # Schedule play_media (audio-only) on the dedicated loop.
+        # Play the media using the provided URL.
         asyncio.run_coroutine_threadsafe(play_media(chat_id, video_url, video_title), tgcalls_loop).result()
     except Exception as e:
+        print(f"Error playing media for chat {chat_id}: {e}")
         return jsonify({'error': str(e)}), 500
 
     return jsonify({'message': 'Playing media', 'chatid': chatid, 'title': video_title})
+
 
 
 @app.route('/vplay', methods=['GET'])
